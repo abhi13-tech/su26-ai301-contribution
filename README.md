@@ -108,16 +108,37 @@ The plan is to:
 
 ## Phase III: Implementation
 
-**Status:** 🔲 Not Started
+**Status:** ✅ Complete
 
 ### Testing Strategy
-> _How will you verify your fix works? What tests exist? What tests will you write?_
+
+Verified manually with 11 smoke tests covering:
+- Default `replaced_undefined_by=np.nan` behavior (precision/recall/f1/jaccard undefined)
+- Explicit `replaced_undefined_by=0.0` and `replaced_undefined_by=1.0`
+- Multiclass scenarios where only some labels are undefined
+- Legacy `zero_division` still works but issues `FutureWarning`
+- Normal (defined) cases still produce no spurious warnings
+
+All 11 tests pass. Next step: run the official scikit-learn test suite for `_classification.py` before submitting a PR.
 
 ### Implementation Notes
-> _Document your implementation decisions, blockers you hit, and how you resolved them._
+
+**Key decisions:**
+- Added `_check_replaced_undefined_by()` helper alongside the existing `_check_zero_division()`
+- Modified `_prf_divide()` to take an optional `replaced_undefined_by` kwarg; old `zero_division` path is preserved as "legacy"
+- Updated `_warn_prf()` to show the actual replacement value in the warning message (e.g., "being set to np.nan") and to mention `replaced_undefined_by` in the advice
+- Deprecation warning is emitted at `stacklevel=2` in each public function's body when `zero_division != "warn"`
+- `validate_params` constraints updated to include `"nan"` (which maps to `np.nan`) for `replaced_undefined_by`
+
+**Important insight discovered:** For `f1_score([1,1,1], [0,0,0])`, the f-score denominator `(1+1)*tp + fn + fp = 0 + 3 + 0 = 3 != 0`, so f1=0.0 is well-defined. Only precision is undefined (no predicted positives). This is correct behavior.
+
+**Blocker resolved:** Python `__pycache__` had stale `.pyc` files that needed to be cleared after patching the installed sklearn. Also discovered that `validate_params` with `prefer_skip_nested_validation=True` skips re-validation for nested calls, which means `np.nan` passes through correctly.
 
 ### Key Files Changed
-> _List the files you modified and briefly explain each change._
+
+| File | Change |
+|------|--------|
+| `sklearn/metrics/_classification.py` | Added `_check_replaced_undefined_by()` helper; updated `_prf_divide()`, `_warn_prf()`, `jaccard_score()`, `f1_score()`, `fbeta_score()`, `precision_recall_fscore_support()`, `precision_score()`, `recall_score()`, `classification_report()` |
 
 ---
 
@@ -148,7 +169,7 @@ The plan is to:
 | Week | Date | What I Did | Blockers | Next Steps |
 |------|------|------------|----------|------------|
 | 1    | 2026-06-04 | Set up contribution README, made first contribution to first-contributions repo, selected and claimed scikit-learn issue #33712 | None | Understand codebase, reproduce issue, plan solution (Phase II) |
-| 2    | 2026-06-04 | Explored scikit-learn source, mapped all 9 affected functions, documented architecture and solution approach (Phase II complete) | None | Implement `replaced_undefined_by` parameter across all affected functions (Phase III) |
+| 2    | 2026-06-04 | Explored scikit-learn source, mapped all 9 affected functions, documented architecture and solution approach (Phase II complete); implemented `replaced_undefined_by` across all 7 public metric functions, validated with 11 smoke tests (Phase III complete) | `__pycache__` staleness needed clearing; f1_score conceptual edge case clarification | Fork repo on GitHub, run full test suite, open PR (Phase IV) |
 | 3    |      |            |          |            |
 | 4    |      |            |          |            |
 
@@ -160,6 +181,7 @@ The plan is to:
 - [My PR to first-contributions](https://github.com/firstcontributions/first-contributions/pulls)
 - [scikit-learn Issue #33712](https://github.com/scikit-learn/scikit-learn/issues/33712)
 - [sklearn/metrics/_classification.py](https://github.com/scikit-learn/scikit-learn/blob/main/sklearn/metrics/_classification.py)
+- [scikit-learn Contributing Guide](https://scikit-learn.org/dev/developers/contributing.html)
 - _Additional links added as I progress..._
 
 ---
