@@ -42,16 +42,67 @@ The issue asks us to add a new parameter `replaced_undefined_by` to several scik
 
 ## Phase II: Understanding the Issue
 
-**Status:** 🔲 Not Started
+**Status:** ✅ Complete
 
 ### Understanding the Codebase
-> _How did you explore the project? What files/modules are relevant? What did you learn about the architecture?_
+
+The relevant code lives entirely in `sklearn/metrics/_classification.py` (4000+ lines). Key components:
+
+| Component | Location | Role |
+|-----------|----------|------|
+| `_check_zero_division(zero_division)` | Line 65 | Validates and converts `zero_division` param to a float value |
+| `_prf_divide(...)` | Line 1845 | Core divide-by-zero handler used by all PRF metrics |
+| `_warn_prf(...)` | Line 1884 | Emits `UndefinedMetricWarning` with contextual message |
+| `precision_recall_fscore_support(...)` | Line 1960 | Master function called by `precision_score`, `recall_score`, `f1_score`, `fbeta_score` |
+| `jaccard_score(...)` | Line 1059 | Has its own separate `zero_division` handling |
+| `classification_report(...)` | Line 2967 | Also accepts `zero_division` and passes it through |
+
+**Architecture insight:** `precision_score`, `recall_score`, `f1_score`, and `fbeta_score` all funnel through `precision_recall_fscore_support`, which calls `_prf_divide`. The `zero_division` param flows: user API -> `precision_recall_fscore_support` -> `_prf_divide` -> `_check_zero_division`. `jaccard_score` has its own parallel path.
+
+**Validation constraint pattern:** Each public function has a `@validate_params` decorator with `"zero_division": [...]` constraints that must also be updated.
 
 ### Reproduction Process
-> _Steps you took to reproduce the bug or verify the missing feature. What did you observe?_
+
+Current behavior (scikit-learn 1.9.0):
+```python
+from sklearn.metrics import f1_score
+import numpy as np
+
+y_true = [1, 1, 1]
+y_pred = [0, 0, 0]
+
+# Default behavior: returns 0.0 and emits UndefinedMetricWarning
+f1_score(y_true, y_pred)
+
+# Explicit nan: suppresses warning, returns nan
+f1_score(y_true, y_pred, zero_division=np.nan)
+
+# Goal after fix: new parameter with nan as default
+# f1_score(y_true, y_pred)                              # => nan (no confusing 0.0)
+# f1_score(y_true, y_pred, replaced_undefined_by=0.0)  # => 0.0
+# f1_score(y_true, y_pred, zero_division=np.nan)        # => nan + DeprecationWarning
+```
 
 ### Solution Approach
-> _What is your plan to fix or implement this? What alternatives did you consider?_
+
+The plan is to:
+1. Add `replaced_undefined_by=np.nan` as new parameter to all affected functions
+2. Keep `zero_division` with a `FutureWarning` deprecation when used
+3. Update `_check_zero_division` (or add `_check_replaced_undefined_by`) to validate the new param
+4. Update `_prf_divide` and `_warn_prf` to use the new parameter name in warning messages
+5. Update `@validate_params` constraints for each function
+6. Update all docstrings
+7. Add/update tests in `sklearn/metrics/tests/test_classification.py`
+
+**Affected functions (~9 total):**
+- `precision_recall_fscore_support`
+- `precision_score`
+- `recall_score`
+- `f1_score`
+- `fbeta_score`
+- `jaccard_score`
+- `classification_report`
+- (possibly `class_likelihood_ratios` if applicable)
 
 ---
 
@@ -97,7 +148,7 @@ The issue asks us to add a new parameter `replaced_undefined_by` to several scik
 | Week | Date | What I Did | Blockers | Next Steps |
 |------|------|------------|----------|------------|
 | 1    | 2026-06-04 | Set up contribution README, made first contribution to first-contributions repo, selected and claimed scikit-learn issue #33712 | None | Understand codebase, reproduce issue, plan solution (Phase II) |
-| 2    |      |            |          |            |
+| 2    | 2026-06-04 | Explored scikit-learn source, mapped all 9 affected functions, documented architecture and solution approach (Phase II complete) | None | Implement `replaced_undefined_by` parameter across all affected functions (Phase III) |
 | 3    |      |            |          |            |
 | 4    |      |            |          |            |
 
@@ -107,6 +158,8 @@ The issue asks us to add a new parameter `replaced_undefined_by` to several scik
 
 - [First Contributions Repo](https://github.com/abhi13-tech/first-contributions)
 - [My PR to first-contributions](https://github.com/firstcontributions/first-contributions/pulls)
+- [scikit-learn Issue #33712](https://github.com/scikit-learn/scikit-learn/issues/33712)
+- [sklearn/metrics/_classification.py](https://github.com/scikit-learn/scikit-learn/blob/main/sklearn/metrics/_classification.py)
 - _Additional links added as I progress..._
 
 ---
