@@ -15,19 +15,28 @@ This is my living contribution journal for the AI301 open source contribution pr
 
 ## Phase I: Issue Selection
 
-**Status:** 🔲 In Progress
+**Status:** ✅ Complete
 
 | Field | Details |
 |-------|---------|
-| **Issue Link** | _To be filled_ |
-| **Project/Repo** | _To be filled_ |
-| **Issue Title** | _To be filled_ |
+| **Issue Link** | [#33712 - Add replaced_undefined_by in classification metrics](https://github.com/scikit-learn/scikit-learn/issues/33712) |
+| **Project/Repo** | [scikit-learn/scikit-learn](https://github.com/scikit-learn/scikit-learn) |
+| **Issue Title** | Add `replaced_undefined_by` in classification metrics |
+| **Claimed** | [My comment on the issue](https://github.com/scikit-learn/scikit-learn/issues/33712#issuecomment-4619271030) |
 
 ### Problem Summary
-> _Describe the issue in your own words. What is broken or missing? What does the project need?_
+The issue asks us to add a new parameter `replaced_undefined_by` to several scikit-learn classification metrics (like `jaccard_score`, `f1_score`, `precision_score`, `recall_score`, etc.). Currently these metrics use a `zero_division` parameter to handle undefined cases (e.g., dividing by zero when no predictions are made for a class). The goal is to:
+- Deprecate `zero_division` in favor of the clearer `replaced_undefined_by` parameter
+- Default the new parameter to `nan` instead of `0` or `1`
+- Emit an `UndefinedMetricWarning` with a clear explanation when the metric is undefined
+- Apply this change consistently across ~9 classification metric functions
 
 ### Why I Chose This Issue
-> _Explain your reasoning. Consider: skill match, interest, impact, difficulty level._
+- **Pure Python + ML:** No frontend or infrastructure knowledge needed -- straight scikit-learn Python
+- **Very specific scope:** Adding/renaming a parameter with defined behavior, not redesigning anything
+- **Not yet claimed:** 0 comments when I found it, fresh from April 2026
+- **High-impact repo:** scikit-learn is one of the most used ML libraries in the world -- great for portfolio
+- **Incremental:** Can tackle one metric function at a time, making it manageable
 
 ---
 
@@ -87,7 +96,7 @@ This is my living contribution journal for the AI301 open source contribution pr
 
 | Week | Date | What I Did | Blockers | Next Steps |
 |------|------|------------|----------|------------|
-| 1    |      | Set up contribution README, made first contribution to first-contributions repo | None | Select an issue for main contribution |
+| 1    | 2026-06-04 | Set up contribution README, made first contribution to first-contributions repo, selected and claimed scikit-learn issue #33712 | None | Understand codebase, reproduce issue, plan solution (Phase II) |
 | 2    |      |            |          |            |
 | 3    |      |            |          |            |
 | 4    |      |            |          |            |
