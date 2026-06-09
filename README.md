@@ -144,17 +144,17 @@ All 11 tests pass. Next step: run the official scikit-learn test suite for `_cla
 
 ## Phase IV: Pull Request
 
-**Status:** 🔲 Not Started
+**Status:** ✅ Complete
 
 | Field | Details |
 |-------|---------|
-| **PR Link** | _To be filled_ |
-| **PR Title** | _To be filled_ |
-| **Date Submitted** | _To be filled_ |
-| **Current Status** | _Open / Under Review / Merged / Closed_ |
+| **PR Link** | [#34225 - ENH Add replaced_undefined_by parameter to classification metrics](https://github.com/scikit-learn/scikit-learn/pull/34225) |
+| **PR Title** | ENH Add replaced_undefined_by parameter to classification metrics, deprecating zero_division |
+| **Date Submitted** | 2026-06-09 |
+| **Current Status** | Open / Under Review |
 
 ### PR Summary
-> _Summarize what your pull request does in 2-3 sentences, as if explaining to the project maintainer._
+This PR adds `replaced_undefined_by=np.nan` as a new parameter to all 7 classification metric functions (`precision_score`, `recall_score`, `f1_score`, `fbeta_score`, `jaccard_score`, `precision_recall_fscore_support`, `classification_report`), deprecating the old `zero_division` parameter with a `FutureWarning`. The default behavior changes from returning `0.0` silently to returning `nan`, making undefined metric cases explicit and consistent with the rest of sklearn's API.
 
 ### Maintainer Feedback Log
 
@@ -170,7 +170,7 @@ All 11 tests pass. Next step: run the official scikit-learn test suite for `_cla
 |------|------|------------|----------|------------|
 | 1    | 2026-06-04 | Set up contribution README, made first contribution to first-contributions repo, selected and claimed scikit-learn issue #33712 | None | Understand codebase, reproduce issue, plan solution (Phase II) |
 | 2    | 2026-06-04 | Explored scikit-learn source, mapped all 9 affected functions, documented architecture and solution approach (Phase II complete); implemented `replaced_undefined_by` across all 7 public metric functions, validated with 11 smoke tests (Phase III complete) | `__pycache__` staleness needed clearing; f1_score conceptual edge case clarification | Fork repo on GitHub, run full test suite, open PR (Phase IV) |
-| 3    |      |            |          |            |
+| 3    | 2026-06-09 | Forked scikit-learn, pushed `feature/replaced-undefined-by` branch, opened PR #34225 to scikit-learn/scikit-learn (Phase IV complete) | GitHub token scanning revoked PAT mid-session; resolved using `gh` CLI with keyring auth | Monitor PR for maintainer feedback, address review comments |
 | 4    |      |            |          |            |
 
 ---
