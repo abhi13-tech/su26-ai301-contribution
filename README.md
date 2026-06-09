@@ -63,46 +63,73 @@ The relevant code lives entirely in `sklearn/metrics/_classification.py` (4000+ 
 
 ### Reproduction Process
 
-Current behavior (scikit-learn 1.9.0):
-```python
-from sklearn.metrics import f1_score
-import numpy as np
+#### Environment Setup
 
-y_true = [1, 1, 1]
-y_pred = [0, 0, 0]
+- **OS:** Windows 11, Python 3.13
+- Cloned scikit-learn upstream (`scikit-learn/scikit-learn`) directly; installed in editable mode via `pip install -e ".[tests]"` in a virtual env at `C:\Users\aduno\.venvs\sklearn-dev`
+- **Challenge 1:** `pip install -e .` failed due to missing `Cython` and `meson-python` -- resolved by running `pip install cython meson-python ninja` first
+- **Challenge 2:** After patching `_classification.py`, Python's `__pycache__` served stale `.pyc` files -- resolved by deleting all `__pycache__` dirs under `sklearn/metrics/` before re-running tests
+- **Challenge 3:** `validate_params` with `prefer_skip_nested_validation=True` skips re-validation in nested calls -- discovered this means `np.nan` passes through without being caught by inner validators, which is actually correct behavior
 
-# Default behavior: returns 0.0 and emits UndefinedMetricWarning
-f1_score(y_true, y_pred)
+**Working branch:** [abhi13-tech/scikit-learn — feature/replaced-undefined-by](https://github.com/abhi13-tech/scikit-learn/tree/feature/replaced-undefined-by)
 
-# Explicit nan: suppresses warning, returns nan
-f1_score(y_true, y_pred, zero_division=np.nan)
+#### Steps to Reproduce
 
-# Goal after fix: new parameter with nan as default
-# f1_score(y_true, y_pred)                              # => nan (no confusing 0.0)
-# f1_score(y_true, y_pred, replaced_undefined_by=0.0)  # => 0.0
-# f1_score(y_true, y_pred, zero_division=np.nan)        # => nan + DeprecationWarning
-```
+1. Install scikit-learn 1.9.0 in a clean virtual environment:
+   ```bash
+   pip install scikit-learn==1.9.0
+   ```
+2. Open a Python shell and run:
+   ```python
+   from sklearn.metrics import precision_score, recall_score, f1_score, jaccard_score
+   import numpy as np
+   import warnings
+
+   y_true = [1, 1, 1]
+   y_pred = [0, 0, 0]
+
+   with warnings.catch_warnings(record=True) as w:
+       warnings.simplefilter("always")
+       result = precision_score(y_true, y_pred)
+       print(f"Result: {result}")          # Expected after fix: nan
+       print(f"Warnings: {[str(x.message) for x in w]}")
+   ```
+3. **Observed (before fix):** `Result: 0.0` with an `UndefinedMetricWarning` saying precision is ill-defined. The value `0.0` is misleading -- it implies the model got 0% precision, but it actually made *no predictions at all* for the positive class.
+4. **Expected (after fix):** `Result: nan` with an `UndefinedMetricWarning` that says "use `replaced_undefined_by` parameter to control this behavior."
+5. Verify the same silent-zero behavior appears for `recall_score`, `f1_score`, and `jaccard_score` under the same conditions.
+6. Verify that passing `zero_division=0` does **not** currently raise a deprecation warning (it should after the fix).
 
 ### Solution Approach
 
-The plan is to:
-1. Add `replaced_undefined_by=np.nan` as new parameter to all affected functions
-2. Keep `zero_division` with a `FutureWarning` deprecation when used
-3. Update `_check_zero_division` (or add `_check_replaced_undefined_by`) to validate the new param
-4. Update `_prf_divide` and `_warn_prf` to use the new parameter name in warning messages
-5. Update `@validate_params` constraints for each function
-6. Update all docstrings
-7. Add/update tests in `sklearn/metrics/tests/test_classification.py`
+#### Implementation Plan (UMPIRE)
 
-**Affected functions (~9 total):**
-- `precision_recall_fscore_support`
-- `precision_score`
-- `recall_score`
-- `f1_score`
-- `fbeta_score`
-- `jaccard_score`
-- `classification_report`
-- (possibly `class_likelihood_ratios` if applicable)
+**Understand:**
+The issue is that all classification metrics silently return `0.0` when the metric is mathematically undefined (e.g., precision when no positive predictions are made). This is controlled by the `zero_division` parameter which defaults to `"warn"` (meaning: return 0 and emit a warning). The request is to introduce `replaced_undefined_by` as a clearer replacement parameter that defaults to `np.nan` instead of `0`, making undefined results explicit rather than silently zero.
+
+**Match:**
+The existing `_check_zero_division()` helper at line 65 of `_classification.py` is the exact pattern to replicate. A new `_check_replaced_undefined_by()` function follows the same validation pattern. The `_prf_divide()` function at line 1845 is where the actual substitution happens -- this is the single place to add `replaced_undefined_by` support for all PRF metrics. `jaccard_score` has its own inline zero-division handling that needs a parallel fix.
+
+**Plan:**
+1. Add `_check_replaced_undefined_by(replaced_undefined_by)` helper in `_classification.py` (validates that the value is `0`, `1`, or `np.nan`)
+2. Update `_prf_divide(numerator, denominator, metric, modifier, average, warn_for, replaced_undefined_by=np.nan)` to use the new param
+3. Update `_warn_prf()` to reference `replaced_undefined_by` in its warning message text
+4. Add `replaced_undefined_by=np.nan` parameter to all 7 public functions: `precision_recall_fscore_support`, `precision_score`, `recall_score`, `f1_score`, `fbeta_score`, `jaccard_score`, `classification_report`
+5. In each public function: emit `FutureWarning` when `zero_division` is passed with a non-default value, then convert to `replaced_undefined_by`
+6. Update `@validate_params` decorators on all 7 functions to include `replaced_undefined_by` constraint
+7. Add tests in `sklearn/metrics/tests/test_classification.py` covering: default `nan` behavior, explicit `0`/`1`, multiclass partial-undefined, `FutureWarning` on `zero_division` use
+
+**Implement:** [PR #34225](https://github.com/scikit-learn/scikit-learn/pull/34225) | [Branch](https://github.com/abhi13-tech/scikit-learn/tree/feature/replaced-undefined-by)
+
+**Review:**
+- Followed scikit-learn's [Contributing Guide](https://scikit-learn.org/dev/developers/contributing.html)
+- Commit message follows `ENH`/`STY` prefix convention used in the project
+- Used `ruff format` and `ruff check --fix` to pass the project's linter (all CI checks green)
+- Kept `zero_division` backward-compatible -- no breaking change
+
+**Evaluate:**
+- 11 smoke tests written and passing locally
+- Full `ci/circleci: lint`, `ci/circleci: doc`, `ci/circleci: doc-min-dependencies` CI checks all ✅ passing on the PR
+- Manually verified: `precision_score([1,1,1], [0,0,0])` now returns `nan` and emits `UndefinedMetricWarning`; passing `zero_division=0` emits `FutureWarning`
 
 ---
 
